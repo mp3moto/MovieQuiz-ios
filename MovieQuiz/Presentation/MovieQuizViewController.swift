@@ -1,91 +1,160 @@
 import UIKit
 
-final class MovieQuizViewController: UIViewController {
-    
+final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
     @IBOutlet private var moviePoster: UIImageView!
     @IBOutlet private var questionForUser: UILabel!
     @IBOutlet private var questionNumber: UILabel!
     @IBOutlet private var noButton: UIButton!
-    @IBOutlet weak var yesButton: UIButton!
-    
+    @IBOutlet private var yesButton: UIButton!
+    @IBOutlet private var activityIndicator: UIActivityIndicatorView!
+    @IBOutlet private var movieTitle: UILabel!
+
     @IBAction private func noButtonClicked(_ sender: UIButton) {
-        guard questionNumberGlobal < questions.count else { return }
-        if !questions[questionNumberGlobal].correctAnswer {
-            showAnswerResult(isCorrect: true)
+        guard let currentQuestion = currentQuestion else {
+            return
         }
-        else {
+        if currentQuestion.correctAnswer {
+            showAnswerResult(isCorrect: true)
+        } else {
             showAnswerResult(isCorrect: false)
         }
     }
+
     @IBAction private func yesButtonClicked(_ sender: UIButton) {
-        guard questionNumberGlobal < questions.count else { return }
-        if questions[questionNumberGlobal].correctAnswer {
-            showAnswerResult(isCorrect: true)
+        guard let currentQuestion = currentQuestion else {
+            return
         }
-        else {
+        if !currentQuestion.correctAnswer {
+            showAnswerResult(isCorrect: true)
+        } else {
             showAnswerResult(isCorrect: false)
         }
     }
 
-    struct QuizeQuestion {
-        let image: String
-        let text: String
-        let correctAnswer: Bool
-    }
-
-    struct QuizeStepViewModel {
-        let image: String
-        let question: String
-        let questionNumber: Int
-    }
-
-    struct QuizeResultsViewModel {
-        var title: String
-        var text: String
-    }
-
-    private var questions: [QuizeQuestion] = []
-    private var questionNumberGlobal: Int = 0, corrects: Int = 0, wrongs: Int = 0, rounds: Int = 0, records: Int = 0, average: Float = 0.0, recordDate: String = ""
-    private var currentViewModel: QuizeStepViewModel = QuizeStepViewModel(image: "", question: "", questionNumber: 0)
-    private var resultsViewModel: QuizeResultsViewModel = QuizeResultsViewModel(title: "", text: "")
+    private let questionsAmount: Int = 10
+    private var questionFactory: QuestionFactoryProtocol?
+    private var currentQuestion: QuizeQuestion?
+    private var questionNumberGlobal: Int = 0, corrects: Int = 0, wrongs: Int = 0
+    private var currentViewModel = QuizeStepViewModel(image: Data(), question: "", questionNumber: "", title: "")
+    private var resultsViewModel = QuizeResultsViewModel(title: "", text: "")
     private var accuracy: [Double] = []
     private var avgAccuracy: Double = 0.0
-    private var sumAccuracy: Double = 0.0
-    private var buttonsBlocked: Bool = false
+    private var sumAccuracy = 0.0
+    private var buttonsBlocked = false
     private let greenColor: CGColor = UIColor(named: "YCGreen")!.cgColor
     private let redColor: CGColor = UIColor(named: "YCRed")!.cgColor
+    private let statisticService: StatisticService = StatisticServiceImplementation()
+    private let moviesLoader = MoviesLoader()
 
     private func convert(model: QuizeQuestion) -> QuizeStepViewModel {
-        return QuizeStepViewModel(image: model.image, question: model.text, questionNumber: questionNumberGlobal)
+        return QuizeStepViewModel(
+            image: model.image,
+            question: model.text,
+            questionNumber: "\(questionNumberGlobal + 1)/\(questionsAmount)",
+            title: model.title
+        )
+    }
+
+    private func showLoadingIndicator() {
+        DispatchQueue.main.async {
+            self.movieTitle.isHidden = true
+            self.activityIndicator.isHidden = false
+            self.activityIndicator.startAnimating()
+        }
+    }
+
+    private func hideLoadingIndicator() {
+        DispatchQueue.main.async {
+            self.activityIndicator.isHidden = true
+            self.activityIndicator.stopAnimating()
+        }
+    }
+
+    private func showNetworkError(message: String) {
+        hideLoadingIndicator()
+        let alert = ResultAlertPresenter(
+            title: "Ошибка сети",
+            message: message,
+            buttonText: "OK",
+            controller: self,
+            actionHandler: { _ in }
+        )
+        DispatchQueue.main.async {
+            alert.show()
+        }
+    }
+
+    private func showImageLoadError(message: String) {
+        let alert = ResultAlertPresenter(
+            title: "Ошибка загрузки изображения",
+            message: message,
+            buttonText: "OK",
+            controller: self,
+            actionHandler: { _ in }
+        )
+        DispatchQueue.main.async {
+            self.movieTitle.isHidden = false
+            alert.show()
+        }
+    }
+
+    private func showJSONErrorMessage(message: String) {
+        let alert = ResultAlertPresenter(
+            title: "Ошибка в полученных данных",
+            message: message,
+            buttonText: "OK",
+            controller: self,
+            actionHandler: { _ in }
+        )
+        DispatchQueue.main.async {
+            self.movieTitle.isHidden = false
+            alert.show()
+        }
+    }
+
+    private func showErrorMessage(message: String) {
+        let alert = ResultAlertPresenter(
+            title: "Ошибка",
+            message: message,
+            buttonText: "OK",
+            controller: self,
+            actionHandler: { _ in }
+        )
+        DispatchQueue.main.async {
+            self.movieTitle.isHidden = false
+            alert.show()
+        }
     }
 
     private func show(quize step: QuizeStepViewModel) {
         moviePoster.layer.borderWidth = 0
-        let currentViewModel = convert(model: questions[questionNumberGlobal])
-        moviePoster.image = UIImage(named: currentViewModel.image)
+        currentViewModel = step
+        moviePoster.image = UIImage(data: currentViewModel.image)
         questionForUser.text = currentViewModel.question
-        questionNumber.text = "\(currentViewModel.questionNumber + 1)/\(questions.count)"
-        //buttonsBlocked = false
+        questionNumber.text = currentViewModel.questionNumber
         yesButton.isEnabled = true
         noButton.isEnabled = true
+        hideLoadingIndicator()
+        movieTitle.text = "Наименование фильма:\n\(currentViewModel.title)"
     }
 
     private func show(quize result: QuizeResultsViewModel) {
-        // создаём объекты всплывающего окна
-        let alert = UIAlertController(title: result.title, // заголовок всплывающего окна
-                                    message: result.text, // текст во всплывающем окне
-                                      preferredStyle: .alert) // preferredStyle может быть .alert или .actionSheet
+        corrects = 0
+        questionNumberGlobal = 0
 
-        // создаём для него кнопки с действиями
-        let action = UIAlertAction(title: "Сыграть еще раз!", style: .default, handler: { _ in
-            self.show(quize: self.convert(model: self.questions[self.questionNumberGlobal]))
-        })
-
-        // добавляем в алерт кнопки
-        alert.addAction(action)
-
-        // показываем всплывающее окно
-        self.present(alert, animated: true, completion: nil)
+        let alert = ResultAlertPresenter(
+            title: result.title,
+            message: result.text,
+            buttonText: "Сыграть еще раз!",
+            controller: self,
+            actionHandler: { _ in
+                self.showLoadingIndicator()
+                self.questionFactory?.requestNextQuestion()
+            }
+        )
+        DispatchQueue.main.async {
+            alert.show()
+        }
     }
 
     private func showAnswerResult(isCorrect: Bool) {
@@ -95,10 +164,8 @@ final class MovieQuizViewController: UIViewController {
         if isCorrect {
             moviePoster.layer.borderColor = greenColor
             corrects += 1
-        }
-        else {
+        } else {
             moviePoster.layer.borderColor = redColor
-            wrongs += 1
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.showNextQuestionOrResults()
@@ -107,61 +174,68 @@ final class MovieQuizViewController: UIViewController {
 
     private func showNextQuestionOrResults() {
         questionNumberGlobal += 1
-        guard questionNumberGlobal < questions.count else {
-            rounds += 1
-            if corrects > records {
-                records = corrects
-                let temporaryDateVar = Date()
-                recordDate = temporaryDateVar.dateTimeString
-            }
-            if corrects > 0 {
-                accuracy.append((Double(corrects) / Double(questions.count)) * 100.0)
-            }
-            else {
-                accuracy.append(0.0)
-            }
-            if !accuracy.isEmpty {
-                sumAccuracy = 0.0
-                for element in accuracy {
-                    sumAccuracy += element
-                }
-                print(sumAccuracy)
-                avgAccuracy = sumAccuracy / Double(accuracy.count)
-            }
-            if corrects != questions.count {
+        guard questionNumberGlobal < questionsAmount else {
+            if corrects != questionsAmount {
                 resultsViewModel.title = "Этот раунд окончен!"
-            }
-            else {
+            } else {
                 resultsViewModel.title = "Потрясающе!"
             }
-            resultsViewModel.text = "Ваш результат: \(corrects)/\(questions.count)\nКоличество сыграных квизов:\(rounds)\nРекорд: \(records)/\(questions.count) (\(recordDate))"
-            resultsViewModel.text += "\nСредняя точность: \(avgAccuracy)%"
-            corrects = 0
-            wrongs = 0
-            questionNumberGlobal = 0
+            statisticService.store(correct: corrects, total: questionsAmount)
+            resultsViewModel.text = "Ваш результат: \(corrects)/\(questionsAmount)\n"
+            resultsViewModel.text += "Количество сыграных квизов:\(statisticService.gamesCount)\n"
+            resultsViewModel.text += "Рекорд: \(statisticService.bestGame.correct)/\(statisticService.bestGame.total) (\(statisticService.bestGame.date.dateTimeString))"
+            resultsViewModel.text += "\nСредняя точность: \(String(format: "%.2f", statisticService.totalAccuracy))%"
             show(quize: resultsViewModel)
             return
         }
-        show(quize: convert(model: questions[questionNumberGlobal]))
+        showLoadingIndicator()
+        questionFactory?.requestNextQuestion()
     }
-
     // MARK: - Lifecycle
     override func viewDidLoad() {
-        questions.append(QuizeQuestion(image: "The Godfather",text: "Рейтинг этого замечательного фильма \"Крестный отец\" больше, чем 6?" ,correctAnswer: true))
-        questions.append(QuizeQuestion(image: "The Dark Knight", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: true))
-        questions.append(QuizeQuestion(image: "Kill Bill", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: true))
-        questions.append(QuizeQuestion(image: "The Green Knight", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: true))
-        questions.append(QuizeQuestion(image: "The Avengers", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: true))
-        questions.append(QuizeQuestion(image: "Deadpool", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: true))
-        questions.append(QuizeQuestion(image: "Old", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: false))
-        questions.append(QuizeQuestion(image: "The Ice Age Adventures of Buck Wild", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: false))
-        questions.append(QuizeQuestion(image: "Tesla", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: false))
-        questions.append(QuizeQuestion(image: "Vivarium", text: "Рейтинг этого фильма больше, чем 6?", correctAnswer: false))
         super.viewDidLoad()
-        moviePoster.layer.masksToBounds = true // даём разрешение на рисование рамки
-        moviePoster.layer.borderWidth = 0 // толщина рамки
-        moviePoster.layer.borderColor = UIColor.white.cgColor // делаем рамку белой
-        moviePoster.layer.cornerRadius = 20 // радиус скругления углов рамки
-        show(quize: convert(model: questions[questionNumberGlobal]))
+        self.moviePoster.layer.masksToBounds = true
+        self.moviePoster.layer.borderWidth = 0
+        self.moviePoster.layer.borderColor = UIColor.white.cgColor
+        self.moviePoster.layer.cornerRadius = 20
+        self.movieTitle.isHidden = true
+        questionFactory = QuestionFactory(moviesLoader: moviesLoader, delegate: self)
+        questionFactory?.loadData()
+    }
+
+    // MARK: QuestionFactoryDelegate
+    func didReceiveNextQuestion(question: QuizeQuestion?) {
+        guard
+            let question = question
+        else {
+            questionFactory?.requestNextQuestion()
+            return
+        }
+        currentQuestion = question
+        let viewModel = convert(model: question)
+        hideLoadingIndicator()
+        DispatchQueue.main.async { [weak self] in
+            self?.show(quize: viewModel)
+        }
+    }
+
+    func didLoadDataFromServer() {
+        questionFactory?.requestNextQuestion()
+    }
+
+    func didFailToLoadData(with error: Error) {
+        showNetworkError(message: error.localizedDescription)
+    }
+
+    func didFailToLoadImage(with error: Error) {
+        showImageLoadError(message: error.localizedDescription)
+    }
+
+    func didReceiveErrorMessageInJSON(errorMessage errorMess: String) {
+        showJSONErrorMessage(message: errorMess)
+    }
+
+    func didReceiveErrorMessage(errorMessage errorMess: String) {
+        showErrorMessage(message: errorMess)
     }
 }
