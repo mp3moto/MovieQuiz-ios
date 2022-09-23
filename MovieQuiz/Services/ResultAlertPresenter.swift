@@ -20,8 +20,11 @@ class ResultAlertPresenter {
         self.controller = controller
         self.actionHandler = actionHandler
     }
-    func show() {
+    func show(_ id: String? = nil) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        if id != nil {
+            alert.view.accessibilityIdentifier = id
+        }
         let action = UIAlertAction(
             title: self.buttonText,
             style: .default,

@@ -10,31 +10,17 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
     @IBOutlet private var movieTitle: UILabel!
 
     @IBAction private func noButtonClicked(_ sender: UIButton) {
-        guard let currentQuestion = currentQuestion else {
-            return
-        }
-        if currentQuestion.correctAnswer {
-            showAnswerResult(isCorrect: true)
-        } else {
-            showAnswerResult(isCorrect: false)
-        }
+        presenter.noButtonClicked()
     }
 
     @IBAction private func yesButtonClicked(_ sender: UIButton) {
-        guard let currentQuestion = currentQuestion else {
-            return
-        }
-        if !currentQuestion.correctAnswer {
-            showAnswerResult(isCorrect: true)
-        } else {
-            showAnswerResult(isCorrect: false)
-        }
+        presenter.yesButtonClicked()
     }
 
-    private let questionsAmount: Int = 10
+    // private let questionsAmount: Int = 10
     private var questionFactory: QuestionFactoryProtocol?
-    private var currentQuestion: QuizeQuestion?
-    private var questionNumberGlobal: Int = 0, corrects: Int = 0, wrongs: Int = 0
+    
+    private var /*questionNumberGlobal: Int = 0,*/ corrects: Int = 0, wrongs: Int = 0
     private var currentViewModel = QuizeStepViewModel(image: Data(), question: "", questionNumber: "", title: "")
     private var resultsViewModel = QuizeResultsViewModel(title: "", text: "")
     private var accuracy: [Double] = []
@@ -45,15 +31,7 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
     private let redColor: CGColor = UIColor(named: "YCRed")!.cgColor
     private let statisticService: StatisticService = StatisticServiceImplementation()
     private let moviesLoader = MoviesLoader()
-
-    private func convert(model: QuizeQuestion) -> QuizeStepViewModel {
-        return QuizeStepViewModel(
-            image: model.image,
-            question: model.text,
-            questionNumber: "\(questionNumberGlobal + 1)/\(questionsAmount)",
-            title: model.title
-        )
-    }
+    private let presenter = MovieQuizPresenter()
 
     private func showLoadingIndicator() {
         DispatchQueue.main.async {
@@ -140,7 +118,7 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
 
     private func show(quize result: QuizeResultsViewModel) {
         corrects = 0
-        questionNumberGlobal = 0
+        presenter.resetQuestionIndex()
 
         let alert = ResultAlertPresenter(
             title: result.title,
@@ -157,7 +135,7 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
         }
     }
 
-    private func showAnswerResult(isCorrect: Bool) {
+    func showAnswerResult(isCorrect: Bool) {
         yesButton.isEnabled = false
         noButton.isEnabled = false
         moviePoster.layer.borderWidth = 8
@@ -173,15 +151,15 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
     }
 
     private func showNextQuestionOrResults() {
-        questionNumberGlobal += 1
-        guard questionNumberGlobal < questionsAmount else {
-            if corrects != questionsAmount {
+        presenter.switchToNextQuestion()
+        guard !presenter.isLastQuestion() else {
+            if corrects != presenter.questionsAmount {
                 resultsViewModel.title = "Этот раунд окончен!"
             } else {
                 resultsViewModel.title = "Потрясающе!"
             }
-            statisticService.store(correct: corrects, total: questionsAmount)
-            resultsViewModel.text = "Ваш результат: \(corrects)/\(questionsAmount)\n"
+            statisticService.store(correct: corrects, total: presenter.questionsAmount)
+            resultsViewModel.text = "Ваш результат: \(corrects)/\(presenter.questionsAmount)\n"
             resultsViewModel.text += "Количество сыграных квизов:\(statisticService.gamesCount)\n"
             resultsViewModel.text += "Рекорд: \(statisticService.bestGame.correct)/\(statisticService.bestGame.total) (\(statisticService.bestGame.date.dateTimeString))"
             resultsViewModel.text += "\nСредняя точность: \(String(format: "%.2f", statisticService.totalAccuracy))%"
@@ -199,6 +177,7 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
         self.moviePoster.layer.borderColor = UIColor.white.cgColor
         self.moviePoster.layer.cornerRadius = 20
         self.movieTitle.isHidden = true
+        presenter.viewController = self
         questionFactory = QuestionFactory(moviesLoader: moviesLoader, delegate: self)
         questionFactory?.loadData()
     }
@@ -211,8 +190,8 @@ final class MovieQuizViewController: UIViewController, QuestionFactoryDelegate {
             questionFactory?.requestNextQuestion()
             return
         }
-        currentQuestion = question
-        let viewModel = convert(model: question)
+        presenter.currentQuestion = question
+        let viewModel = presenter.convert(model: question)
         hideLoadingIndicator()
         DispatchQueue.main.async { [weak self] in
             self?.show(quize: viewModel)
