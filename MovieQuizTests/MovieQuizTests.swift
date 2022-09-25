@@ -34,13 +34,13 @@ class MovieQuizTests: XCTestCase {
 
         // When
         let expectation = expectation(description: "Waiting for result")
-        
+
         let result = arithmeticOperations.addition(num1: num1, num2: num2) { result in
             // Then
             XCTAssertEqual(result, 3)
             expectation.fulfill()
         }
-        
+
         waitForExpectations(timeout: 2)
     }
 }
