@@ -48,8 +48,8 @@ final class MovieQuizPresenter: QuestionFactoryDelegate {
         }
         self.currentQuestion = question
         let viewModel = convert(model: question)
-        viewController?.hideLoadingIndicator()
         DispatchQueue.main.async { [weak self] in
+            self?.viewController?.hideLoadingIndicator()
             self?.viewController?.show(quize: viewModel)
         }
     }
@@ -102,14 +102,18 @@ final class MovieQuizPresenter: QuestionFactoryDelegate {
     func restartGame() {
         questionNumberGlobal = 0
         corrects = 0
-        viewController?.showLoadingIndicator()
+        DispatchQueue.main.async { [weak self] in
+            self?.viewController?.showLoadingIndicator()
+        }
         questionFactory?.requestNextQuestion()
     }
 
     func showNextQuestionOrResults() {
         self.switchToNextQuestion()
         if !self.isLastQuestion() {
-            viewController?.showLoadingIndicator()
+            DispatchQueue.main.async { [weak self] in
+                self?.viewController?.showLoadingIndicator()
+            }
             questionFactory?.requestNextQuestion()
         } else {
             if corrects != self.questionsAmount {
