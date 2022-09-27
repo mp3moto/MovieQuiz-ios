@@ -5,7 +5,7 @@ final class MovieQuizPresenter: QuestionFactoryDelegate {
     private var questionNumberGlobal: Int = 0
     var corrects: Int = 0
     var currentQuestion: QuizeQuestion?
-    weak var viewController: (MovieQuizViewControllerProtocol)?// MovieQuizViewController?
+    weak var viewController: MovieQuizViewControllerProtocol?
     private var resultsViewModel = QuizeResultsViewModel(title: "", text: "")
     private var questionFactory: QuestionFactoryProtocol?
     private let moviesLoader = MoviesLoader()
@@ -108,7 +108,10 @@ final class MovieQuizPresenter: QuestionFactoryDelegate {
 
     func showNextQuestionOrResults() {
         self.switchToNextQuestion()
-        guard !self.isLastQuestion() else {
+        if !self.isLastQuestion() {
+            viewController?.showLoadingIndicator()
+            questionFactory?.requestNextQuestion()
+        } else {
             if corrects != self.questionsAmount {
                 resultsViewModel.title = "Этот раунд окончен!"
             } else {
@@ -122,8 +125,6 @@ final class MovieQuizPresenter: QuestionFactoryDelegate {
             viewController?.show(quize: resultsViewModel)
             return
         }
-        viewController?.showLoadingIndicator()
-        questionFactory?.requestNextQuestion()
     }
 
     func showAnswerResult(isCorrect: Bool) {
