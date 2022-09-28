@@ -22,7 +22,7 @@ class ResultAlertPresenter {
     }
     func show(_ id: String? = nil) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        if id != nil {
+        if let id = id {
             alert.view.accessibilityIdentifier = id
         }
         let action = UIAlertAction(

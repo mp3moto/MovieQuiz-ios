@@ -23,18 +23,14 @@ final class MovieQuizViewController: UIViewController, MovieQuizViewControllerPr
     private var presenter: MovieQuizPresenter!
 
     func showLoadingIndicator() {
-        DispatchQueue.main.async {
-            self.movieTitle.isHidden = true
-            self.activityIndicator.isHidden = false
-            self.activityIndicator.startAnimating()
-        }
+        self.movieTitle.isHidden = true
+        self.activityIndicator.isHidden = false
+        self.activityIndicator.startAnimating()
     }
 
     func hideLoadingIndicator() {
-        DispatchQueue.main.async {
-            self.activityIndicator.isHidden = true
-            self.activityIndicator.stopAnimating()
-        }
+        self.activityIndicator.isHidden = true
+        self.activityIndicator.stopAnimating()
     }
 
     func showNetworkError(message: String) {
